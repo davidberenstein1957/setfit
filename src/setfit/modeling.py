@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Union
 
-
 # For Python 3.7 compatibility
 try:
     from typing import Literal
@@ -20,9 +19,8 @@ import torch
 from huggingface_hub import PyTorchModelHubMixin, hf_hub_download
 from huggingface_hub.utils import validate_hf_hub_args
 from packaging.version import Version, parse
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, models
 from sentence_transformers import __version__ as sentence_transformers_version
-from sentence_transformers import models
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.multioutput import ClassifierChain, MultiOutputClassifier
@@ -35,7 +33,6 @@ from . import logging
 from .data import SetFitDataset
 from .model_card import SetFitModelCardData, generate_model_card
 from .utils import set_docstring
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -217,11 +214,15 @@ class SetFitModel(PyTorchModelHubMixin):
     multi_target_strategy: Optional[str] = None
     normalize_embeddings: bool = False
     labels: Optional[List[str]] = None
-    model_card_data: Optional[SetFitModelCardData] = field(default_factory=SetFitModelCardData)
+    model_card_data: Optional[SetFitModelCardData] = field(
+        default_factory=SetFitModelCardData
+    )
     sentence_transformers_kwargs: Dict = field(default_factory=dict, repr=False)
 
     attributes_to_save: Set[str] = field(
-        init=False, repr=False, default_factory=lambda: {"normalize_embeddings", "labels"}
+        init=False,
+        repr=False,
+        default_factory=lambda: {"normalize_embeddings", "labels"},
     )
 
     def __post_init__(self):
@@ -285,12 +286,25 @@ class SetFitModel(PyTorchModelHubMixin):
             if not end_to_end:
                 self.freeze("body")
 
-            dataloader = self._prepare_dataloader(x_train, y_train, batch_size, max_length)
+            dataloader = self._prepare_dataloader(
+                x_train, y_train, batch_size, max_length
+            )
             criterion = self.model_head.get_loss_fn()
-            optimizer = self._prepare_optimizer(head_learning_rate, body_learning_rate, l2_weight)
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
-            for epoch_idx in trange(num_epochs, desc="Epoch", disable=not show_progress_bar):
-                for batch in tqdm(dataloader, desc="Iteration", disable=not show_progress_bar, leave=False):
+            optimizer = self._prepare_optimizer(
+                head_learning_rate, body_learning_rate, l2_weight
+            )
+            scheduler = torch.optim.lr_scheduler.StepLR(
+                optimizer, step_size=5, gamma=0.5
+            )
+            for epoch_idx in trange(
+                num_epochs, desc="Epoch", disable=not show_progress_bar
+            ):
+                for batch in tqdm(
+                    dataloader,
+                    desc="Iteration",
+                    disable=not show_progress_bar,
+                    leave=False,
+                ):
                     features, labels = batch
                     optimizer.zero_grad()
 
@@ -315,7 +329,9 @@ class SetFitModel(PyTorchModelHubMixin):
             if not end_to_end:
                 self.unfreeze("body")
         else:  # train with sklearn
-            embeddings = self.model_body.encode(x_train, normalize_embeddings=self.normalize_embeddings)
+            embeddings = self.model_body.encode(
+                x_train, normalize_embeddings=self.normalize_embeddings
+            )
             self.model_head.fit(embeddings, y_train)
             if self.labels is None and self.multi_target_strategy is None:
                 # Try to set the labels based on the head classes, if they exist
@@ -382,7 +398,11 @@ class SetFitModel(PyTorchModelHubMixin):
                     "lr": body_learning_rate,
                     "weight_decay": l2_weight,
                 },
-                {"params": self.model_head.parameters(), "lr": head_learning_rate, "weight_decay": l2_weight},
+                {
+                    "params": self.model_head.parameters(),
+                    "lr": head_learning_rate,
+                    "weight_decay": l2_weight,
+                },
             ],
         )
 
@@ -402,7 +422,9 @@ class SetFitModel(PyTorchModelHubMixin):
             self._freeze_or_not(self.model_head, to_freeze=True)
 
     def unfreeze(
-        self, component: Optional[Literal["body", "head"]] = None, keep_body_frozen: Optional[bool] = None
+        self,
+        component: Optional[Literal["body", "head"]] = None,
+        keep_body_frozen: Optional[bool] = None,
     ) -> None:
         """Unfreeze the model body and/or the head, allowing further training on that component.
 
@@ -435,7 +457,10 @@ class SetFitModel(PyTorchModelHubMixin):
             param.requires_grad = not to_freeze
 
     def encode(
-        self, inputs: List[str], batch_size: int = 32, show_progress_bar: Optional[bool] = None
+        self,
+        inputs: List[str],
+        batch_size: int = 32,
+        show_progress_bar: Optional[bool] = None,
     ) -> Union[torch.Tensor, np.ndarray]:
         """Convert input sentences to embeddings using the `SentenceTransformer` body.
 
@@ -473,7 +498,11 @@ class SetFitModel(PyTorchModelHubMixin):
         """
         if as_numpy and self.has_differentiable_head:
             outputs = outputs.detach().cpu().numpy()
-        elif not as_numpy and not self.has_differentiable_head and outputs.dtype.char != "U":
+        elif (
+            not as_numpy
+            and not self.has_differentiable_head
+            and outputs.dtype.char != "U"
+        ):
             # Only output as tensor if the output isn't a string
             outputs = torch.from_numpy(outputs)
         return outputs
@@ -512,7 +541,9 @@ class SetFitModel(PyTorchModelHubMixin):
         is_singular = isinstance(inputs, str)
         if is_singular:
             inputs = [inputs]
-        embeddings = self.encode(inputs, batch_size=batch_size, show_progress_bar=show_progress_bar)
+        embeddings = self.encode(
+            inputs, batch_size=batch_size, show_progress_bar=show_progress_bar
+        )
         probs = self.model_head.predict_proba(embeddings)
         if isinstance(probs, list):
             if self.has_differentiable_head:
@@ -557,7 +588,9 @@ class SetFitModel(PyTorchModelHubMixin):
         is_singular = isinstance(inputs, str)
         if is_singular:
             inputs = [inputs]
-        embeddings = self.encode(inputs, batch_size=batch_size, show_progress_bar=show_progress_bar)
+        embeddings = self.encode(
+            inputs, batch_size=batch_size, show_progress_bar=show_progress_bar
+        )
         preds = self.model_head.predict(embeddings)
         # If labels are defined, we don't have multilabels & the output is not already strings, then we convert to string labels
         if (
@@ -641,7 +674,9 @@ class SetFitModel(PyTorchModelHubMixin):
         # Note that we must also set _target_device with sentence-transformers <2.3.0,
         # or any SentenceTransformer.fit() call will reset the body location
         if parse(sentence_transformers_version) < Version("2.3.0"):
-            self.model_body._target_device = device if isinstance(device, torch.device) else torch.device(device)
+            self.model_body._target_device = (
+                device if isinstance(device, torch.device) else torch.device(device)
+            )
         self.model_body = self.model_body.to(device)
 
         if self.has_differentiable_head:
@@ -649,7 +684,9 @@ class SetFitModel(PyTorchModelHubMixin):
 
         return self
 
-    def create_model_card(self, path: str, model_name: Optional[str] = "SetFit Model") -> None:
+    def create_model_card(
+        self, path: str, model_name: Optional[str] = "SetFit Model"
+    ) -> None:
         """Creates and saves a model card for a SetFit model.
 
         Args:
@@ -663,7 +700,10 @@ class SetFitModel(PyTorchModelHubMixin):
         # via push_to_hub, and the path is in a temporary folder, then we only take the last two
         # directories
         model_path = Path(model_name)
-        if model_path.exists() and Path(tempfile.gettempdir()) in model_path.resolve().parents:
+        if (
+            model_path.exists()
+            and Path(tempfile.gettempdir()) in model_path.resolve().parents
+        ):
             self.model_card_data.model_id = "/".join(model_path.parts[-2:])
 
         with open(os.path.join(path, "README.md"), "w", encoding="utf-8") as f:
@@ -772,7 +812,9 @@ class SetFitModel(PyTorchModelHubMixin):
             except requests.exceptions.RequestException:
                 pass
 
-        model_kwargs = {key: value for key, value in model_kwargs.items() if value is not None}
+        model_kwargs = {
+            key: value for key, value in model_kwargs.items() if value is not None
+        }
 
         if config_file is not None:
             with open(config_file, "r", encoding="utf-8") as f:
@@ -818,13 +860,15 @@ class SetFitModel(PyTorchModelHubMixin):
                 )
                 model_head_file = None
 
-        model_card_data: SetFitModelCardData = model_kwargs.pop("model_card_data", SetFitModelCardData())
+        model_card_data: SetFitModelCardData = model_kwargs.pop(
+            "model_card_data", SetFitModelCardData()
+        )
 
         if model_head_file is not None:
             model_head = joblib.load(model_head_file)
             if isinstance(model_head, torch.nn.Module):
                 model_head.to(device)
-            model_card_data.infer_st_id(model_id)
+            # model_card_data.infer_st_id(model_id)
         else:
             head_params = model_kwargs.pop("head_params", {})
             if use_differentiable_head:
@@ -856,13 +900,17 @@ class SetFitModel(PyTorchModelHubMixin):
                     elif multi_target_strategy == "classifier-chain":
                         multilabel_classifier = ClassifierChain(clf)
                     else:
-                        raise ValueError(f"multi_target_strategy {multi_target_strategy} is not supported.")
+                        raise ValueError(
+                            f"multi_target_strategy {multi_target_strategy} is not supported."
+                        )
 
                     model_head = multilabel_classifier
                 else:
                     model_head = clf
 
-            model_card_data.set_st_id(model_id if "/" in model_id else f"sentence-transformers/{model_id}")
+            model_card_data.set_st_id(
+                model_id if "/" in model_id else f"sentence-transformers/{model_id}"
+            )
 
         # Remove the `transformers` config
         model_kwargs.pop("config", None)

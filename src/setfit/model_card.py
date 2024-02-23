@@ -11,7 +11,14 @@ import tokenizers
 import torch
 import transformers
 from datasets import Dataset
-from huggingface_hub import CardData, DatasetFilter, ModelCard, dataset_info, list_datasets, model_info
+from huggingface_hub import (
+    CardData,
+    DatasetFilter,
+    ModelCard,
+    dataset_info,
+    list_datasets,
+    model_info,
+)
 from huggingface_hub.repocard_data import EvalResult, eval_results_to_model_index
 from huggingface_hub.utils import yaml_dump
 from sentence_transformers import __version__ as sentence_transformers_version
@@ -24,7 +31,6 @@ from transformers.training_args import TrainingArguments
 from setfit import __version__ as setfit_version
 
 from . import logging
-
 
 logger = logging.get_logger(__name__)
 
@@ -47,7 +53,12 @@ class ModelCardCallback(TrainerCallback):
             trainer.model.model_card_data.code_carbon_callback = callbacks[0]
 
     def on_init_end(
-        self, args: TrainingArguments, state: TrainerState, control: TrainerControl, model: "SetFitModel", **kwargs
+        self,
+        args: TrainingArguments,
+        state: TrainerState,
+        control: TrainerControl,
+        model: "SetFitModel",
+        **kwargs,
     ):
         if not model.model_card_data.dataset_id:
             # Inferring is hacky - it may break in the future, so let's be safe
@@ -65,13 +76,20 @@ class ModelCardCallback(TrainerCallback):
             model.model_card_data.set_train_set_metrics(self.trainer.train_dataset)
             # Does not work for multilabel
             try:
-                model.model_card_data.num_classes = len(set(self.trainer.train_dataset["label"]))
+                model.model_card_data.num_classes = len(
+                    set(self.trainer.train_dataset["label"])
+                )
                 model.model_card_data.set_label_examples(self.trainer.train_dataset)
             except Exception:
                 pass
 
     def on_train_begin(
-        self, args: TrainingArguments, state: TrainerState, control: TrainerControl, model: "SetFitModel", **kwargs
+        self,
+        args: TrainingArguments,
+        state: TrainerState,
+        control: TrainerControl,
+        model: "SetFitModel",
+        **kwargs,
     ) -> None:
         # model.model_card_data.hyperparameters = extract_hyperparameters_from_trainer(self.trainer)
         ignore_keys = {
@@ -113,7 +131,9 @@ class ModelCardCallback(TrainerCallback):
             model.model_card_data.eval_lines_list
             and model.model_card_data.eval_lines_list[-1]["Step"] == state.global_step
         ):
-            model.model_card_data.eval_lines_list[-1]["Validation Loss"] = metrics["eval_embedding_loss"]
+            model.model_card_data.eval_lines_list[-1]["Validation Loss"] = metrics[
+                "eval_embedding_loss"
+            ]
         else:
             model.model_card_data.eval_lines_list.append(
                 {
@@ -134,13 +154,20 @@ class ModelCardCallback(TrainerCallback):
         logs: Dict[str, float],
         **kwargs,
     ):
-        keys = {"embedding_loss", "polarity_embedding_loss", "aspect_embedding_loss"} & set(logs)
+        keys = {
+            "embedding_loss",
+            "polarity_embedding_loss",
+            "aspect_embedding_loss",
+        } & set(logs)
         if keys:
             if (
                 model.model_card_data.eval_lines_list
-                and model.model_card_data.eval_lines_list[-1]["Step"] == state.global_step
+                and model.model_card_data.eval_lines_list[-1]["Step"]
+                == state.global_step
             ):
-                model.model_card_data.eval_lines_list[-1]["Training Loss"] = logs[keys.pop()]
+                model.model_card_data.eval_lines_list[-1]["Training Loss"] = logs[
+                    keys.pop()
+                ]
             else:
                 model.model_card_data.eval_lines_list.append(
                     {
@@ -231,15 +258,21 @@ class SetFitModelCardData(CardData):
 
     # Automatically filled by `ModelCardCallback` and the Trainer directly
     hyperparameters: Dict[str, Any] = field(default_factory=dict, init=False)
-    eval_results_dict: Optional[Dict[str, Any]] = field(default_factory=dict, init=False)
+    eval_results_dict: Optional[Dict[str, Any]] = field(
+        default_factory=dict, init=False
+    )
     eval_lines_list: List[Dict[str, float]] = field(default_factory=list, init=False)
     metric_lines: List[Dict[str, float]] = field(default_factory=list, init=False)
     widget: List[Dict[str, str]] = field(default_factory=list, init=False)
     predict_example: Optional[str] = field(default=None, init=False)
     label_example_list: List[Dict[str, str]] = field(default_factory=list, init=False)
     tokenizer_warning: bool = field(default=False, init=False)
-    train_set_metrics_list: List[Dict[str, str]] = field(default_factory=list, init=False)
-    train_set_sentences_per_label_list: List[Dict[str, str]] = field(default_factory=list, init=False)
+    train_set_metrics_list: List[Dict[str, str]] = field(
+        default_factory=list, init=False
+    )
+    train_set_sentences_per_label_list: List[Dict[str, str]] = field(
+        default_factory=list, init=False
+    )
     code_carbon_callback: Optional[CodeCarbonCallback] = field(default=None, init=False)
     num_classes: Optional[int] = field(default=None, init=False)
     best_model_step: Optional[int] = field(default=None, init=False)
@@ -300,8 +333,13 @@ class SetFitModelCardData(CardData):
         self.best_model_step = step
 
     def set_widget_examples(self, dataset: Dataset) -> None:
-        samples = dataset.select(random.sample(range(len(dataset)), k=min(len(dataset), 5)))["text"]
-        self.widget = [{"text": sample} for sample in samples]
+        column = "text"
+        if "text" not in dataset.column_names:
+            column = ["image"]
+        samples = dataset.select(
+            random.sample(range(len(dataset)), k=min(len(dataset), 5))
+        )[column]
+        self.widget = [{column: sample} for sample in samples]
 
         samples.sort(key=len)
         if samples:
@@ -326,7 +364,9 @@ class SetFitModelCardData(CardData):
             return
 
         sample_label = dataset[0]["label"]
-        if isinstance(sample_label, collections.abc.Sequence) and not isinstance(sample_label, str):
+        if isinstance(sample_label, collections.abc.Sequence) and not isinstance(
+            sample_label, str
+        ):
             return
         try:
             counter = Counter(dataset["label"])
@@ -335,7 +375,11 @@ class SetFitModelCardData(CardData):
                     {
                         "Label": str_label,
                         "Training Sample Count": counter[
-                            str_label if isinstance(sample_label, str) else self.model.label2id[str_label]
+                            (
+                                str_label
+                                if isinstance(sample_label, str)
+                                else self.model.label2id[str_label]
+                            )
                         ],
                     }
                     for str_label in self.model.labels
@@ -344,7 +388,9 @@ class SetFitModelCardData(CardData):
                 self.train_set_sentences_per_label_list = [
                     {
                         "Label": (
-                            self.model.labels[label] if self.model.labels and isinstance(label, int) else str(label)
+                            self.model.labels[label]
+                            if self.model.labels and isinstance(label, int)
+                            else str(label)
                         ),
                         "Training Sample Count": count,
                     }
@@ -370,7 +416,11 @@ class SetFitModelCardData(CardData):
                 break
         self.label_example_list = [
             {
-                "Label": self.model.labels[label] if self.model.labels and isinstance(label, int) else label,
+                "Label": (
+                    self.model.labels[label]
+                    if self.model.labels and isinstance(label, int)
+                    else label
+                ),
                 "Examples": "<ul>" + "".join(example_set) + "</ul>",
             }
             for label, example_set in examples.items()
@@ -409,7 +459,9 @@ class SetFitModelCardData(CardData):
             # Make sure the normalized dataset IDs match
             dataset_list = [
                 dataset
-                for dataset in list_datasets(filter=DatasetFilter(author=author, dataset_name=dataset_name))
+                for dataset in list_datasets(
+                    filter=DatasetFilter(author=author, dataset_name=dataset_name)
+                )
                 if normalize(dataset.id) == normalize(cache_dataset_name)
             ]
             # If there's only one match, get the ID from it
@@ -446,7 +498,10 @@ class SetFitModelCardData(CardData):
         # In that case, we take the last part, split on _, and try all combinations
         # e.g. "a_b_c_d" -> ['a/b_c_d', 'a_b/c_d', 'a_b_c/d']
         splits = st_id_path.name.split("_")
-        candidate_model_ids += ["_".join(splits[:idx]) + "/" + "_".join(splits[idx:]) for idx in range(1, len(splits))]
+        candidate_model_ids += [
+            "_".join(splits[:idx]) + "/" + "_".join(splits[idx:])
+            for idx in range(1, len(splits))
+        ]
         for model_id in candidate_model_ids:
             if is_on_huggingface(model_id):
                 self.st_id = model_id
@@ -466,15 +521,22 @@ class SetFitModelCardData(CardData):
                 pass
             return value
 
-        pure_python_results = {key: try_to_pure_python(value) for key, value in results.items()}
+        pure_python_results = {
+            key: try_to_pure_python(value) for key, value in results.items()
+        }
         results_without_split = {
-            key.split("_", maxsplit=1)[1].title(): value for key, value in pure_python_results.items()
+            key.split("_", maxsplit=1)[1].title(): value
+            for key, value in pure_python_results.items()
         }
         self.eval_results_dict = pure_python_results
         self.metric_lines = [{"Label": "**all**", **results_without_split}]
 
     def _maybe_round(self, v, decimals=4):
-        if isinstance(v, float) and len(str(v).split(".")) > 1 and len(str(v).split(".")[1]) > decimals:
+        if (
+            isinstance(v, float)
+            and len(str(v).split(".")) > 1
+            and len(str(v).split(".")[1]) > decimals
+        ):
             return f"{v:.{decimals}f}"
         return str(v)
 
@@ -500,11 +562,20 @@ class SetFitModelCardData(CardData):
                 )
                 for metric_key, metric_value in self.eval_results_dict.items()
             ]
-            super_dict["metrics"] = [metric_key.split("_", maxsplit=1)[1] for metric_key in self.eval_results_dict]
-            super_dict["model-index"] = eval_results_to_model_index(self.model_name, eval_results)
+            super_dict["metrics"] = [
+                metric_key.split("_", maxsplit=1)[1]
+                for metric_key in self.eval_results_dict
+            ]
+            super_dict["model-index"] = eval_results_to_model_index(
+                self.model_name, eval_results
+            )
         eval_lines_list = [
             {
-                key: f"**{self._maybe_round(value)}**" if line["Step"] == self.best_model_step else value
+                key: (
+                    f"**{self._maybe_round(value)}**"
+                    if line["Step"] == self.best_model_step
+                    else value
+                )
                 for key, value in line.items()
             }
             for line in self.eval_lines_list
@@ -512,12 +583,18 @@ class SetFitModelCardData(CardData):
         super_dict["eval_lines"] = make_markdown_table(eval_lines_list)
         super_dict["explain_bold_in_eval"] = "**" in super_dict["eval_lines"]
         # Replace |:---:| with |:---| for left alignment
-        super_dict["label_examples"] = make_markdown_table(self.label_example_list).replace("-:|", "--|")
-        super_dict["train_set_metrics"] = make_markdown_table(self.train_set_metrics_list).replace("-:|", "--|")
+        super_dict["label_examples"] = make_markdown_table(
+            self.label_example_list
+        ).replace("-:|", "--|")
+        super_dict["train_set_metrics"] = make_markdown_table(
+            self.train_set_metrics_list
+        ).replace("-:|", "--|")
         super_dict["train_set_sentences_per_label_list"] = make_markdown_table(
             self.train_set_sentences_per_label_list
         ).replace("-:|", "--|")
-        super_dict["metrics_table"] = make_markdown_table(self.metric_lines).replace("-:|", "--|")
+        super_dict["metrics_table"] = make_markdown_table(self.metric_lines).replace(
+            "-:|", "--|"
+        )
         if self.code_carbon_callback and self.code_carbon_callback.tracker:
             emissions_data = self.code_carbon_callback.tracker._prepare_emissions_data()
             super_dict["co2_eq_emissions"] = {
@@ -531,7 +608,9 @@ class SetFitModelCardData(CardData):
                 "hours_used": round(emissions_data.duration / 3600, 3),
             }
             if emissions_data.gpu_model:
-                super_dict["co2_eq_emissions"]["hardware_used"] = emissions_data.gpu_model
+                super_dict["co2_eq_emissions"][
+                    "hardware_used"
+                ] = emissions_data.gpu_model
         if self.dataset_id:
             super_dict["datasets"] = [self.dataset_id]
         if self.st_id:
@@ -549,7 +628,11 @@ class SetFitModelCardData(CardData):
 
     def to_yaml(self, line_break=None) -> str:
         return yaml_dump(
-            {key: value for key, value in self.to_dict().items() if key in YAML_FIELDS and value is not None},
+            {
+                key: value
+                for key, value in self.to_dict().items()
+                if key in YAML_FIELDS and value is not None
+            },
             sort_keys=False,
             line_break=line_break,
         ).strip()
@@ -573,5 +656,7 @@ def is_on_huggingface(repo_id: str, is_model: bool = True) -> bool:
 
 def generate_model_card(model: "SetFitModel") -> str:
     template_path = Path(__file__).parent / "model_card_template.md"
-    model_card = ModelCard.from_template(card_data=model.model_card_data, template_path=template_path, hf_emoji="🤗")
+    model_card = ModelCard.from_template(
+        card_data=model.model_card_data, template_path=template_path, hf_emoji="🤗"
+    )
     return model_card.content
